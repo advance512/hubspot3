@@ -1,62 +1,97 @@
 """
 hubspot owners api
 """
+from typing import Any, Dict, Optional, Union
+
 from hubspot3.crm_associations import CRMAssociationsClient
 from hubspot3.base import BaseClient
 
 
-OWNERS_API_VERSION = "v2"
+OWNERS_API_VERSION = "v3"
 
 
 class OwnersClient(BaseClient):
     """
     hubspot3 Owners client
-    :see: https://developers.hubspot.com/docs/methods/owners/owners_overview
+    :see: https://developers.hubspot.com/docs/reference/api/crm/owners
     """
 
-    def _get_path(self, subpath):
+    def _get_path(self, subpath: str) -> str:
         """get the full api url for the given subpath on this client"""
-        return f"owners/{OWNERS_API_VERSION}/owners"
+        path = f"crm/{OWNERS_API_VERSION}/owners"
+        if subpath:
+            return f"{path}/{subpath}"
+        return path
 
-    def get_owners(self, **options):
-        """Only returns the list of owners, does not include additional metadata"""
-        return self._call("owners", **options)
+    def get_owners(
+        self,
+        limit: int = 100,
+        after: Optional[str] = None,
+        email: Optional[str] = None,
+        archived: bool = False,
+        **options: Any,
+    ) -> Dict:
+        """Get a page of owners."""
+        params = {
+            "limit": limit,
+            "archived": str(archived).lower()
+        }
+        if after:
+            params["after"] = after
+        if email:
+            params["email"] = email
 
-    def get_owner_name_by_id(self, owner_id: str, **options) -> str:
-        """Given an id of an owner, return their name"""
-        owner_name = "value_missing"
-        owners = self.get_owners(**options)
-        for owner in owners:
-            if int(owner["ownerId"]) == int(owner_id):
-                owner_name = f"{owner['firstName']} {owner['lastName']}"
-        return owner_name
+        response = self._call("", method="GET", params=params, **options)
 
-    def get_owner_email_by_id(self, owner_id: str, **options) -> str:
-        """given an id of an owner, return their email"""
-        owner_email = "value_missing"
+        return response['results']
+
+    def get_owner_name_by_id(self, owner_id: str, **options: Any) -> str:
+        """
+        Given an owner's ID, return their full name.
+        """
         owner = self.get_owner_by_id(owner_id, **options)
         if owner:
-            owner_email = owner["email"]
-        return owner_email
+            return f"{owner.get('firstName', '')} {owner.get('lastName', '')}".strip()
+        return "value_missing"
 
-    def get_owner_by_id(self, owner_id, **options):
-        """Retrieve an owner by its id."""
-        owners = self.get_owners(**options)
-        for owner in owners:
-            if int(owner["ownerId"]) == int(owner_id):
-                return owner
-        return None
-
-    def get_owner_by_email(self, owner_email: str, **options):
+    def get_owner_email_by_id(self, owner_id: str, **options: Any) -> str:
         """
-        Retrieve an owner by its email.
+        Given an owner's ID, return their email.
         """
-        owners = self.get_owners(method="GET", params={"email": owner_email}, **options)
-        if owners:
-            return owners[0]
-        return None
+        owner = self.get_owner_by_id(owner_id, **options)
+        return owner.get("email", "value_missing") if owner else "value_missing"
 
-    def link_owner_to_company(self, owner_id, company_id):
+    def get_owner_by_id(
+        self,
+        owner_id: str,
+        archived: bool = False,
+        **options: Any
+    ) -> Dict:
+        """
+        Retrieve an owner by their ID.
+        """
+        params = {
+            "idProperty": "id",
+            "archived": str(archived).lower()
+        }
+        return self._call(str(owner_id), method="GET", params=params, **options)
+
+    def get_owner_by_email(
+        self,
+        owner_email: str,
+        **options: Any
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve an owner by their email.
+        """
+        owners = self.get_owners(email=owner_email, **options)
+        return owners[0] if owners else None
+
+    def link_owner_to_company(
+        self,
+        owner_id: Union[str, int],
+        company_id: Union[str, int]
+    ) -> Dict:
         """
         Link an owner to a company by using their ids.
         """
